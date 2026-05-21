@@ -21,7 +21,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, token, Address, Bytes, BytesN, Env, Vec,
+    contract, contractimpl, contracttype, token, Address, Bytes, BytesN, Env, Symbol, Vec,
 };
 
 // ---------------------------------------------------------------------------
