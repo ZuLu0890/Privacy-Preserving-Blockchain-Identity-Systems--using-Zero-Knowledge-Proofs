@@ -17,7 +17,7 @@
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, Bytes, BytesN, Env, Vec};
+use soroban_sdk::{contract, contractimpl, contracttype, Address, Bytes, BytesN, Env, Vec};
 
 // ---------------------------------------------------------------------------
 // Data types
@@ -33,6 +33,8 @@ pub type FieldElement = BytesN<32>;
 pub enum DataKey {
     /// Serialised verification key (set once at deploy time).
     VerifyingKey,
+    /// Contract admin — only this address may call set_verifying_key.
+    Admin,
 }
 
 // ---------------------------------------------------------------------------
@@ -44,12 +46,24 @@ pub struct Groth16Verifier;
 
 #[contractimpl]
 impl Groth16Verifier {
-    /// Store the verifying key. Must be called once by the deployer.
-    ///
-    /// # TODO for contributors
-    /// - Add admin / owner check so only the deployer can call this.
-    /// - Accept the VK in the standard snarkjs JSON format and deserialise it.
+    /// One-time initialisation — records the deployer as admin.
+    /// Must be called immediately after deployment.
+    pub fn init(env: Env, admin: Address) {
+        assert!(
+            !env.storage().instance().has(&DataKey::Admin),
+            "already initialised"
+        );
+        env.storage().instance().set(&DataKey::Admin, &admin);
+    }
+
+    /// Store the verifying key. Only the admin (deployer) may call this.
     pub fn set_verifying_key(env: Env, vk: Bytes) {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .expect("not initialised — call init() first");
+        admin.require_auth();
         env.storage().instance().set(&DataKey::VerifyingKey, &vk);
     }
 
@@ -63,11 +77,6 @@ impl Groth16Verifier {
     ///
     /// # TODO for contributors
     /// - Implement the actual pairing check using Soroban's BN254 host functions.
-    ///   The host exposes `bn254_g1_add`, `bn254_g1_mul`, `bn254_pairing` etc.
-    ///   Reference: https://developers.stellar.org/docs/build/zk-proofs-on-stellar
-    /// - Deserialise `proof` into (pi_a, pi_b, pi_c) G1/G2 points.
-    /// - Compute the linear combination of public inputs with the VK's IC points.
-    /// - Run the four-pairing Groth16 check and return the result.
     pub fn verify(env: Env, proof: Proof, public_inputs: Vec<FieldElement>) -> bool {
         let _vk: Bytes = env
             .storage()
@@ -75,8 +84,7 @@ impl Groth16Verifier {
             .get(&DataKey::VerifyingKey)
             .expect("verifying key not set");
 
-        // PLACEHOLDER — replace with real BN254 pairing check.
-        // Returning false here ensures no proof passes until implemented.
+        // PLACEHOLDER — replace with real BN254 pairing check (see issue #1).
         let _ = (proof, public_inputs);
         false
     }
@@ -89,21 +97,39 @@ impl Groth16Verifier {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::{Bytes, Env, Vec};
+    use soroban_sdk::testutils::Address as _;
+    use soroban_sdk::{Address, Bytes, Env, Vec};
 
     #[test]
-    fn verify_returns_false_before_implementation() {
+    fn only_admin_can_set_vk() {
         let env = Env::default();
+        env.mock_all_auths();
         let contract_id = env.register_contract(None, Groth16Verifier);
         let client = Groth16VerifierClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        client.init(&admin);
+
+        // Admin can set the VK
+        let vk = Bytes::from_slice(&env, &[0u8; 32]);
+        client.set_verifying_key(&vk);
+    }
+
+    #[test]
+    fn verify_returns_false_before_pairing_implementation() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register_contract(None, Groth16Verifier);
+        let client = Groth16VerifierClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        client.init(&admin);
 
         let dummy_vk = Bytes::from_slice(&env, &[0u8; 32]);
         client.set_verifying_key(&dummy_vk);
 
         let dummy_proof = Bytes::from_slice(&env, &[0u8; 256]);
         let inputs: Vec<BytesN<32>> = Vec::new(&env);
-
-        // Until the pairing check is implemented this must return false.
         assert!(!client.verify(&dummy_proof, &inputs));
     }
 }
