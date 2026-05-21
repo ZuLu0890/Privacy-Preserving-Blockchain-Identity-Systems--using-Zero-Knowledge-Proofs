@@ -4,13 +4,12 @@
  * Pedersen / Poseidon commitment helpers for username registration.
  */
 
-import { buildPoseidon } from "circomlibjs";
+import { buildPoseidon, PoseidonFn } from "circomlibjs";
 import { randomBytes } from "crypto";
 
 export type Commitment = Uint8Array; // 32 bytes, BN254 field element
 export type Nullifier = Uint8Array;  // 32 bytes
 
-type PoseidonFn = Awaited<ReturnType<typeof buildPoseidon>>;
 let _poseidon: PoseidonFn | null = null;
 
 async function getPoseidon(): Promise<PoseidonFn> {
@@ -49,8 +48,8 @@ export async function buildCommitment(
   const secretFe = BigInt("0x" + Buffer.from(secret).toString("hex"));
 
   // circomlibjs Poseidon returns Uint8Array(32) directly
-  const commitment = p([usernameFe, secretFe]) as unknown as Uint8Array;
-  const nullifier = p([secretFe, 1n]) as unknown as Uint8Array;
+  const commitment = p([usernameFe, secretFe]);
+  const nullifier = p([secretFe, 1n]);
 
   return { commitment, nullifier };
 }

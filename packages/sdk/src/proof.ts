@@ -82,7 +82,8 @@ export async function verifyProofLocally(
   proof: Groth16Proof,
   vkeyPath: string
 ): Promise<boolean> {
-  const vkey = await import(vkeyPath);
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const vkey = JSON.parse(require("fs").readFileSync(vkeyPath, "utf8"));
   const snarkProof = deserializeProof(proof.proofBytes);
   const publicSignals = proof.publicInputs.map((b) =>
     bytesToBigInt(b).toString()

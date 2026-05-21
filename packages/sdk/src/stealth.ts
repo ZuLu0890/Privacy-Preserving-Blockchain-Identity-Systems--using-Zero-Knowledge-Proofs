@@ -41,10 +41,10 @@ export async function deriveStealthAddress(
   const senderFe = BigInt("0x" + Buffer.from(senderSecret).toString("hex"));
 
   // circomlibjs Poseidon returns Uint8Array(32) directly
-  const stealthAddress = poseidon([recipientFe, senderFe]) as unknown as Uint8Array;
+  const stealthAddress = poseidon([recipientFe, senderFe]);
   const stealthAddressHash = poseidon([
     BigInt("0x" + Buffer.from(stealthAddress).toString("hex")),
-  ]) as unknown as Uint8Array;
+  ]);
 
   return { stealthAddress, ephemeralPubKey, stealthAddressHash };
 }

@@ -1,6 +1,12 @@
 // Type stubs for packages that ship no @types declarations.
 declare module "circomlibjs" {
-  export function buildPoseidon(): Promise<(...args: unknown[]) => bigint>;
+  export interface PoseidonFn {
+    (inputs: bigint[]): Uint8Array;
+    F: {
+      toObject(buf: Uint8Array): bigint;
+    };
+  }
+  export function buildPoseidon(): Promise<PoseidonFn>;
   export function buildBabyjub(): Promise<unknown>;
 }
 

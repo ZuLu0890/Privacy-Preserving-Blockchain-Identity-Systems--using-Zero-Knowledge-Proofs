@@ -9,15 +9,16 @@ import { Router } from "express";
 
 export const commitmentRouter = Router();
 
-commitmentRouter.get("/:username", (req, res) => {
+commitmentRouter.get("/:username", (req, res): void => {
   const { username } = req.params;
 
   if (!username || username.length < 3 || username.length > 31) {
-    return res.status(400).json({ error: "username must be 3–31 characters" });
+    res.status(400).json({ error: "username must be 3–31 characters" });
+    return;
   }
 
   // TODO: query IdentityRegistry contract via Soroban RPC
-  return res.json({
+  res.json({
     username,
     registered: false, // stub — replace with on-chain lookup
   });
