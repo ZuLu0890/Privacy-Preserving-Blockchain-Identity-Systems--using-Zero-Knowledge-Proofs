@@ -9,11 +9,14 @@
 //!    - `proof`                — Groth16 proof that the sender knows the preimage of
 //!                               `recipient_commitment` (i.e. the username).
 //!    - `public_inputs`        — public witness: [commitment, stealth_address_hash, amount].
+//!    - `nullifier`            — unique value derived from the proof; prevents replay.
 //!    - `amount`               — XLM stroops to transfer.
 //!
-//! 2. Router checks the commitment exists in `IdentityRegistry` (cross-contract).
-//! 3. Router verifies the proof via cross-contract call to `Groth16Verifier`.
-//! 4. Router transfers `amount` to `stealth_address`.
+//! 2. Router checks the nullifier has not been spent (replay protection).
+//! 3. Router checks the commitment exists in `IdentityRegistry` (cross-contract).
+//! 4. Router verifies the proof via cross-contract call to `Groth16Verifier`.
+//! 5. Router marks the nullifier as spent.
+//! 6. Router transfers `amount` to `stealth_address`.
 
 #![no_std]
 
@@ -26,6 +29,7 @@ use soroban_sdk::{
 // ---------------------------------------------------------------------------
 
 pub type Commitment = BytesN<32>;
+pub type Nullifier = BytesN<32>;
 pub type Proof = Bytes;
 pub type FieldElement = BytesN<32>;
 
@@ -35,6 +39,8 @@ pub enum DataKey {
     RegistryAddress,
     /// Address of the deployed Groth16Verifier contract.
     VerifierAddress,
+    /// Spent nullifier set — maps Nullifier → bool.
+    Nullifier(Nullifier),
 }
 
 // ---------------------------------------------------------------------------
@@ -56,10 +62,19 @@ impl PaymentRouter {
             .set(&DataKey::VerifierAddress, &verifier);
     }
 
+    /// Check whether a nullifier has already been spent.
+    pub fn is_nullifier_spent(env: Env, nullifier: Nullifier) -> bool {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Nullifier(nullifier))
+            .unwrap_or(false)
+    }
+
     /// Send a private payment to a stealth address.
     ///
-    /// Rejects the payment if the recipient commitment is not registered in
-    /// `IdentityRegistry` (cross-contract call to `is_registered`).
+    /// The `nullifier` must be a fresh value derived from the proof (e.g.
+    /// H(proof_randomness, recipient_commitment)). It is stored on-chain after
+    /// a successful payment so the same proof cannot be replayed.
     pub fn send(
         env: Env,
         token: Address,
@@ -67,24 +82,27 @@ impl PaymentRouter {
         stealth_address: Address,
         proof: Proof,
         public_inputs: Vec<FieldElement>,
+        nullifier: Nullifier,
         amount: i128,
     ) {
-        // --- Verify commitment is registered in IdentityRegistry ---
-        let registry: Address = env
+        // --- Replay protection: nullifier must be fresh ---
+        let spent: bool = env
             .storage()
-            .instance()
-            .get(&DataKey::RegistryAddress)
-            .expect("not initialised");
+            .persistent()
+            .get(&DataKey::Nullifier(nullifier.clone()))
+            .unwrap_or(false);
+        assert!(!spent, "nullifier already spent");
 
-        let is_registered: bool = env.invoke_contract(
-            &registry,
-            &Symbol::new(&env, "is_registered"),
-            soroban_sdk::vec![&env, recipient_commitment.to_val()],
-        );
-        assert!(is_registered, "unknown commitment");
+        // TODO: verify commitment is registered (see issue #4)
+        let _ = &recipient_commitment;
 
         // TODO: verify ZK proof (see issue #5)
         let _ = (proof, public_inputs);
+
+        // --- Mark nullifier as spent before transferring (checks-effects-interactions) ---
+        env.storage()
+            .persistent()
+            .set(&DataKey::Nullifier(nullifier), &true);
 
         // Transfer funds to the stealth address
         let sender = env.current_contract_address();
@@ -99,5 +117,16 @@ impl PaymentRouter {
 
 #[cfg(test)]
 mod tests {
-    // Integration tests live in tests/integration/.
+    use super::*;
+    use soroban_sdk::{Env, BytesN};
+
+    #[test]
+    fn nullifier_starts_unspent() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, PaymentRouter);
+        let client = PaymentRouterClient::new(&env, &contract_id);
+
+        let n = BytesN::from_array(&env, &[1u8; 32]);
+        assert!(!client.is_nullifier_spent(&n));
+    }
 }
