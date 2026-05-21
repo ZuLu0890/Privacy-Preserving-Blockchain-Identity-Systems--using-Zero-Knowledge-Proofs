@@ -101,7 +101,6 @@ impl IdentityRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::testutils::Address as _;
     use soroban_sdk::{Env, BytesN};
 
     fn fresh_env() -> Env {
@@ -115,7 +114,7 @@ mod tests {
     #[test]
     fn register_and_query() {
         let env = fresh_env();
-        let contract_id = env.register_contract(None, IdentityRegistry);
+        let contract_id = env.register(IdentityRegistry, ());
         let client = IdentityRegistryClient::new(&env, &contract_id);
 
         let c = commitment(&env, 1);
@@ -131,7 +130,7 @@ mod tests {
     #[should_panic(expected = "commitment already registered")]
     fn double_register_panics() {
         let env = fresh_env();
-        let contract_id = env.register_contract(None, IdentityRegistry);
+        let contract_id = env.register(IdentityRegistry, ());
         let client = IdentityRegistryClient::new(&env, &contract_id);
 
         let c = commitment(&env, 1);

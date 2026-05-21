@@ -21,7 +21,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, token, Address, Bytes, BytesN, Env, Symbol, Vec,
+    contract, contractimpl, contracttype, token, Address, Bytes, BytesN, Env, Vec,
 };
 
 // ---------------------------------------------------------------------------
@@ -123,7 +123,7 @@ mod tests {
     #[test]
     fn nullifier_starts_unspent() {
         let env = Env::default();
-        let contract_id = env.register_contract(None, PaymentRouter);
+        let contract_id = env.register(PaymentRouter, ());
         let client = PaymentRouterClient::new(&env, &contract_id);
 
         let n = BytesN::from_array(&env, &[1u8; 32]);

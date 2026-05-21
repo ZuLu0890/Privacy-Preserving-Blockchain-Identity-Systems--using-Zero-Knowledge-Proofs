@@ -226,7 +226,7 @@ mod tests {
     fn set_vk_json_serialises_correctly() {
         let env = Env::default();
         env.mock_all_auths();
-        let contract_id = env.register_contract(None, Groth16Verifier);
+        let contract_id = env.register(Groth16Verifier, ());
         let client = Groth16VerifierClient::new(&env, &contract_id);
 
         let admin = Address::generate(&env);
