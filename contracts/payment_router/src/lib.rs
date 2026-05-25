@@ -21,7 +21,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, token, Address, Bytes, BytesN, Env, Vec,
+    contract, contractevent, contractimpl, contracttype, token, Address, Bytes, BytesN, Env, Vec,
 };
 
 // ---------------------------------------------------------------------------
@@ -41,6 +41,15 @@ pub enum DataKey {
     VerifierAddress,
     /// Spent nullifier set — maps Nullifier → bool.
     Nullifier(Nullifier),
+}
+
+/// Emitted after a successful payment.
+#[contractevent]
+pub struct PaymentSent {
+    #[topic]
+    pub commitment: Commitment,
+    pub stealth_address: Address,
+    pub amount: i128,
 }
 
 // ---------------------------------------------------------------------------
@@ -108,6 +117,14 @@ impl PaymentRouter {
         let sender = env.current_contract_address();
         let token_client = token::Client::new(&env, &token);
         token_client.transfer(&sender, &stealth_address, &amount);
+
+        // Emit PaymentSent event so the SDK can scan for incoming stealth payments
+        PaymentSent {
+            commitment: recipient_commitment,
+            stealth_address,
+            amount,
+        }
+        .publish(&env);
     }
 }
 
@@ -118,7 +135,7 @@ impl PaymentRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::{Env, BytesN};
+    use soroban_sdk::{BytesN, Env};
 
     #[test]
     fn nullifier_starts_unspent() {

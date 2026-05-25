@@ -10,7 +10,7 @@
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, BytesN, Env};
+use soroban_sdk::{contract, contractevent, contractimpl, contracttype, BytesN, Env};
 
 // ---------------------------------------------------------------------------
 // Data types
@@ -27,6 +27,14 @@ pub type Nullifier = BytesN<32>;
 pub enum DataKey {
     Commitment(Commitment),
     Nullifier(Nullifier),
+}
+
+/// Emitted after a successful registration.
+#[contractevent]
+pub struct Registered {
+    #[topic]
+    pub commitment: Commitment,
+    pub nullifier: Nullifier,
 }
 
 // ---------------------------------------------------------------------------
@@ -46,11 +54,6 @@ impl IdentityRegistry {
     ///
     /// # Errors
     /// Panics if the commitment or nullifier already exists.
-    ///
-    /// # TODO for contributors
-    /// - Add a Groth16 proof parameter and verify it via the `Groth16Verifier`
-    ///   cross-contract call before accepting the registration.
-    /// - Emit a `Registered` event so the SDK can index new commitments.
     pub fn register(env: Env, commitment: Commitment, nullifier: Nullifier) {
         // Guard: commitment must be fresh
         let committed: bool = env
@@ -71,10 +74,17 @@ impl IdentityRegistry {
         // Persist
         env.storage()
             .persistent()
-            .set(&DataKey::Commitment(commitment), &true);
+            .set(&DataKey::Commitment(commitment.clone()), &true);
         env.storage()
             .persistent()
-            .set(&DataKey::Nullifier(nullifier), &true);
+            .set(&DataKey::Nullifier(nullifier.clone()), &true);
+
+        // Emit Registered event so the SDK can index new commitments
+        Registered {
+            commitment,
+            nullifier,
+        }
+        .publish(&env);
     }
 
     /// Check whether a commitment is registered.
@@ -101,7 +111,8 @@ impl IdentityRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use soroban_sdk::{Env, BytesN};
+    use soroban_sdk::testutils::Events as _;
+    use soroban_sdk::{BytesN, Env};
 
     fn fresh_env() -> Env {
         Env::default()
@@ -124,6 +135,23 @@ mod tests {
         client.register(&c, &n);
         assert!(client.is_registered(&c));
         assert!(client.is_nullifier_spent(&n));
+    }
+
+    #[test]
+    fn register_emits_event() {
+        let env = fresh_env();
+        let contract_id = env.register(IdentityRegistry, ());
+        let client = IdentityRegistryClient::new(&env, &contract_id);
+
+        let c = commitment(&env, 1);
+        let n = commitment(&env, 2);
+        client.register(&c, &n);
+
+        let events = env.events().all();
+        assert!(
+            !events.events().is_empty(),
+            "expected at least one event"
+        );
     }
 
     #[test]

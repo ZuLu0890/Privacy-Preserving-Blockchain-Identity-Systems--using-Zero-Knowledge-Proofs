@@ -1,0 +1,72 @@
+:root {
+  --bg: #ffffff;
+  --fg: #111111;
+  --muted: #555555;
+  --accent: #0070f3;
+  --success: #16a34a;
+  --error: #dc2626;
+  --border: #e5e7eb;
+  --input-bg: #ffffff;
+}
+
+[data-theme="dark"] {
+  --bg: #0a0a0a;
+  --fg: #ededed;
+  --muted: #a1a1aa;
+  --accent: #3b82f6;
+  --success: #22c55e;
+  --error: #ef4444;
+  --border: #27272a;
+  --input-bg: #18181b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  max-width: 640px;
+  margin: 40px auto;
+  padding: 0 16px;
+  background: var(--bg);
+  color: var(--fg);
+  transition: background 0.2s, color 0.2s;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+input {
+  display: block;
+  margin-top: 4px;
+  padding: 6px 8px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--fg);
+  font-size: 14px;
+}
+
+button {
+  cursor: pointer;
+}
+
+button[type="submit"] {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 14px;
+}
+button[type="submit"]:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
