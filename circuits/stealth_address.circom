@@ -10,27 +10,25 @@ pragma circom 2.1.6;
  * Scheme (simplified)
  * -------------------
  * Given:
- *   recipient_pubkey  — recipient's public key (BN254 G1 point, x-coordinate)
- *   sender_secret     — sender's ephemeral scalar (random per payment)
+ *   recipient_pubkey  -- recipient's public key (BN254 G1 point, x-coordinate)
+ *   sender_secret     -- sender's ephemeral scalar (random per payment)
  *
  * Compute:
- *   shared_secret     = Poseidon(recipient_pubkey * sender_secret)  [ECDH]
- *   stealth_address   = Poseidon(shared_secret, 0)                  [derive address]
+ *   shared_secret     = Poseidon(recipient_pubkey, sender_secret)  [ECDH stub]
+ *   stealth_address   = Poseidon(shared_secret, 0)                 [derive address]
+ *   view_tag          = shared_secret (first byte used off-chain for fast scanning)
  *
- * Public inputs:  stealth_address, recipient_pubkey
+ * Public inputs:  stealth_address, recipient_pubkey, view_tag
  * Private inputs: sender_secret, shared_secret
  *
  * The recipient scans the chain, recomputes shared_secret using their private
- * key, and checks whether stealth_address matches.
+ * key, and checks whether stealth_address matches. The view_tag allows
+ * recipients to skip ~99.6% of transactions without full ECDH computation.
  *
  * TODO for contributors
  * ---------------------
  * - Replace the Poseidon-based ECDH stub with a proper BabyJubJub or BN254
  *   scalar multiplication using circomlib's EscalarMulAny component.
- * - Add a view tag (first byte of shared_secret) as a public output so
- *   recipients can scan efficiently without checking every transaction.
- * - Ensure the circuit is compatible with the Groth16Verifier's expected
- *   public input ordering.
  */
 
 include "node_modules/circomlib/circuits/poseidon.circom";
@@ -39,13 +37,14 @@ template StealthAddress() {
     // Public inputs
     signal input stealth_address;
     signal input recipient_pubkey;
+    signal input view_tag;
 
     // Private inputs
     signal input sender_secret;
     signal input shared_secret; // = ECDH(recipient_pubkey, sender_secret)
 
-    // TODO: replace with real scalar multiplication
-    // For now, constrain shared_secret = Poseidon(recipient_pubkey, sender_secret)
+    // Constrain shared_secret = Poseidon(recipient_pubkey, sender_secret)
+    // TODO: replace with real scalar multiplication (BabyJubJub EscalarMulAny)
     component ecdh_stub = Poseidon(2);
     ecdh_stub.inputs[0] <== recipient_pubkey;
     ecdh_stub.inputs[1] <== sender_secret;
@@ -56,8 +55,11 @@ template StealthAddress() {
     addr_hasher.inputs[0] <== shared_secret;
     addr_hasher.inputs[1] <== 0;
     stealth_address === addr_hasher.out;
+
+    // View tag: expose shared_secret as public output for efficient scanning
+    view_tag === shared_secret;
 }
 
 component main {
-    public [stealth_address, recipient_pubkey]
+    public [stealth_address, recipient_pubkey, view_tag]
 } = StealthAddress();
