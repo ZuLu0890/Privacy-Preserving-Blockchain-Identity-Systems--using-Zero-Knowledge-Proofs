@@ -36,6 +36,64 @@ wallet address ever appears in the transaction graph.
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+## Full flow: register → send → receive
+
+```mermaid
+sequenceDiagram
+    actor Alice as Alice (Sender)
+    actor Bob as Bob (Recipient)
+    participant SDK as SDK (Client)
+    participant IR as IdentityRegistry
+    participant PR as PaymentRouter
+    participant GV as Groth16Verifier
+    participant Stellar as Stellar Ledger
+
+    %% ── Registration (Bob registers his username) ──────────────────
+    Note over Bob,IR: Registration
+    Bob->>SDK: register("bob", secret)
+    SDK->>SDK: commitment = Poseidon(username, secret)
+    SDK->>SDK: nullifier  = Poseidon(secret, 1)
+    SDK->>IR: register(commitment, nullifier)
+    IR->>IR: store commitment & nullifier
+    IR-->>SDK: tx hash
+    SDK-->>Bob: tx hash
+
+    %% ── Send (Alice pays Bob by username) ───────────────────────────
+    Note over Alice,Stellar: Send
+    Alice->>SDK: send("bob", amount, token)
+    SDK->>IR: lookup commitment for "bob"
+    IR-->>SDK: commitment
+    SDK->>SDK: derive ephemeral keypair (r, R)
+    SDK->>SDK: stealth_addr = ECDH(r, Bob.pubkey) → P
+    SDK->>SDK: generate Groth16 proof of commitment preimage
+    SDK->>PR: send(token, commitment, stealth_addr, proof, public_inputs, amount)
+    PR->>IR: is_registered(commitment)
+    IR-->>PR: true
+    PR->>GV: verify(proof, public_inputs)
+    GV->>GV: BN254 pairing check
+    GV-->>PR: true
+    PR->>Stellar: transfer(token, amount → stealth_addr)
+    Stellar-->>PR: tx result
+    PR-->>SDK: tx hash
+    SDK-->>Alice: tx hash
+
+    %% ── Receive (Bob scans and claims the payment) ──────────────────
+    Note over Bob,Stellar: Receive
+    Bob->>SDK: scanPayments(Bob.privkey)
+    SDK->>Stellar: fetch recent transactions
+    Stellar-->>SDK: tx list (with ephemeral pubkeys R, view tags)
+    loop For each transaction
+        SDK->>SDK: check view tag (first byte of privkey·R)
+        alt view tag matches
+            SDK->>SDK: S = Bob.privkey · R
+            SDK->>SDK: expected_addr = Poseidon(S)·G + Bob.pubkey
+            alt expected_addr == stealth_addr
+                SDK-->>Bob: payment found (amount, stealth_addr, spending_key)
+            end
+        end
+    end
+```
+
 ## Cryptographic primitives
 
 | Primitive | Purpose | Where |
